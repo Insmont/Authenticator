@@ -1,0 +1,59 @@
+-keepattributes Signature
+-keepattributes *Annotation*
+-keepattributes InnerClasses
+-keepattributes EnclosingMethod
+-keepattributes SourceFile, LineNumberTable
+
+-keepclassmembers class * {
+    *** Companion;
+    *** $serializer;
+}
+-keep @kotlinx.serialization.Serializable class * {
+    <init>(...);
+    *;
+}
+-keep @kotlinx.serialization.SerialName class * { *; }
+
+-keep @org.koin.core.annotation.* class * {
+    <init>(...);
+    *;
+}
+-keepclassmembers class * {
+    @org.koin.core.annotation.* *;
+    @org.koin.core.component.KoinComponent *;
+}
+
+-keep class * extends com.google.protobuf.GeneratedMessageLite { *; }
+
+-keep class org.insmont.authenticator.core.model.** { *; }
+
+-keep class org.insmont.authenticator.core.** {
+    <init>(...);
+}
+-keep class org.insmont.authenticator.feature.** {
+    <init>(...);
+    *;
+}
+
+-keep class com.google.mlkit.**.*Registrar {
+    public <init>();
+}
+-keep class com.google.mlkit.vision.barcode.common.Barcode { *; }
+-keep class com.google.mlkit.vision.barcode.common.Barcode$* { *; }
+
+-keep public class * implements com.google.android.gms.common.internal.safeparcel.SafeParcelable {
+    public static final *** CREATOR;
+}
+
+-dontwarn com.google.android.gms.internal.mlkit_vision_barcode.**
+-dontwarn androidx.camera.mlkit.vision.**
+
+-keep public class * implements com.google.firebase.components.ComponentRegistrar {
+    public <init>();
+}
+
+-dontwarn io.ktor.**
+-dontwarn okhttp3.**
+-dontwarn okio.**
+-dontwarn org.conscrypt.**
+-dontwarn org.slf4j.**

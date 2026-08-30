@@ -1,0 +1,137 @@
+# =============================================================================
+# Android CI + 正式版多架构 APK 发布
+# =============================================================================
+
+name: Android 编译与发布
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  # ===========================================================================
+  # 编译测试
+  # ===========================================================================
+  build-test:
+    if: github.event_name != 'push' || !startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    name: 编译测试（Debug）
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v7
+
+      - name: 设置 JDK 25
+        uses: actions/setup-java@v6
+        with:
+          distribution: 'temurin'
+          java-version: '25'
+          cache: gradle
+
+      - name: 赋予 gradlew 执行权限
+        run: chmod +x gradlew
+
+      - name: 编译 Debug 包
+        run: ./gradlew assembleDebug --stacktrace --no-daemon
+
+  # ===========================================================================
+  # 正式发布
+  # ===========================================================================
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    name: 正式发布（Release）
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: 设置 JDK 25
+        uses: actions/setup-java@v6
+        with:
+          distribution: 'temurin'
+          java-version: '25'
+          cache: gradle
+
+      - name: 赋予 gradlew 执行权限
+        run: chmod +x gradlew
+
+      - name: 解码签名密钥
+        run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > "${{ runner.temp }}/release.jks"
+
+      - name: 构建签名的 Release APK
+        env:
+          ORG_GRADLE_PROJECT_RELEASE_STORE_FILE: "${{ runner.temp }}/release.jks"
+          ORG_GRADLE_PROJECT_RELEASE_STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          ORG_GRADLE_PROJECT_RELEASE_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          ORG_GRADLE_PROJECT_RELEASE_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: ./gradlew assembleRelease --no-daemon
+
+      - name: 整理 APK 产物
+        id: prep
+        run: |
+          TAG=${GITHUB_REF#refs/tags/}
+          VERSION=${TAG#v}
+
+          mkdir -p dist
+
+          find app/build/outputs/apk -name "*.apk" -type f | while read -r apk; do
+            base=$(basename "$apk")
+            echo "找到: $base"
+            cp "$apk" "dist/$base"
+          done
+
+          ls -lh dist/
+
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-apks-${{ steps.prep.outputs.tag }}
+          path: dist/*.apk
+          retention-days: 30
+
+      - name: 提取发布说明
+        id: notes
+        run: |
+          TAG="${{ steps.prep.outputs.tag }}"
+          if [ -f "docs/CHANGELOG.md" ]; then
+            START_LINE=$(grep -n "^## $TAG" docs/CHANGELOG.md | cut -d: -f1)
+            if [ -n "$START_LINE" ]; then
+              tail -n +$((START_LINE + 1)) docs/CHANGELOG.md | sed '/^## /,$d' > "${{ runner.temp }}/release_notes.md"
+              echo "found=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "found=false" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: 创建 GitHub Release 并上传 APK
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ "${{ steps.notes.outputs.found }}" = "true" ]; then
+            NOTES_ARG="--notes-file ${{ runner.temp }}/release_notes.md"
+          else
+            NOTES_ARG="--generate-notes"
+          fi
+          
+          gh release create "${{ steps.prep.outputs.tag }}" \
+            dist/*.apk \
+            --title "${{ steps.prep.outputs.tag }}" \
+            $NOTES_ARG \
+            --latest

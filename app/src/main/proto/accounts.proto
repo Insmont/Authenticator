@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+option java_package = "org.insmont.authenticator.core.datastore";
+option java_multiple_files = true;
+
+message AccountProto {
+  int64 id = 1;
+  string issuer = 2;
+  string account_name = 3;
+  bytes encrypted_secret = 4;
+  string algorithm = 5;
+  int32 digits = 6;
+  int32 period = 7;
+  string type = 8;
+}
+
+message AccountListProto {
+  repeated AccountProto accounts = 1;
+}
